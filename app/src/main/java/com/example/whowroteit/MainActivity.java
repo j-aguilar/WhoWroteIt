@@ -2,9 +2,14 @@ package com.example.whowroteit;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.content.Context;
+import android.hardware.input.InputManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.TextView;
 
@@ -32,7 +37,28 @@ public class MainActivity extends AppCompatActivity {
     public void searchBooks(View view) {
         //Get the search String
         String queryString = mBookInput.getText().toString();
-        new FetchBook(mTitleText, mAuthorText).execute(queryString);
+        //Hide keyboard
+        InputMethodManager inputManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (inputManager != null) {
+            inputManager.hideSoftInputFromWindow(view.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+        }
+        //Check Internet connection & query string presence;
+        ConnectivityManager connMgr = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = null;
+        if (connMgr != null) {
+            networkInfo = connMgr.getActiveNetworkInfo();
+        }
+        mAuthorText.setText("");
+        if (networkInfo != null && networkInfo.isConnected() && queryString.length() != 0) {
+            new FetchBook(mTitleText, mAuthorText).execute(queryString);
+            mTitleText.setText(R.string.loading);
+        } else {
+            if (queryString.length() == 0) {
+                mTitleText.setText(R.string.no_search_term);
+            } else {
+                mTitleText.setText(R.string.no_network);
+            }
+        }
     }
 
     public class FetchBook extends AsyncTask<String, Void, String> {
