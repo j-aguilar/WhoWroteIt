@@ -1,25 +1,27 @@
 package com.example.whowroteit;
 
-import androidx.appcompat.app.AppCompatActivity;
-
+import androidx.annotation.Nullable;
+import androidx.loader.app.LoaderManager;
 import android.content.Context;
-import android.hardware.input.InputManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
-import android.os.AsyncTask;
+
 import android.os.Bundle;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.loader.content.Loader;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.lang.ref.WeakReference;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements LoaderManager.LoaderCallbacks<Object> {
     private EditText mBookInput;
     private TextView mTitleText;
     private TextView mAuthorText;
@@ -32,6 +34,10 @@ public class MainActivity extends AppCompatActivity {
         mBookInput = findViewById(R.id.bookInput);
         mTitleText = findViewById(R.id.titleText);
         mAuthorText = findViewById(R.id.authorText);
+
+        if(getSupportLoaderManager().getLoader(0)!=null){
+            getSupportLoaderManager().initLoader(0,null,this);
+        }
     }
 
     public void searchBooks(View view) {
@@ -50,68 +56,65 @@ public class MainActivity extends AppCompatActivity {
         }
         mAuthorText.setText("");
         if (networkInfo != null && networkInfo.isConnected() && queryString.length() != 0) {
-            new FetchBook(mTitleText, mAuthorText).execute(queryString);
-            mTitleText.setText(R.string.loading);
-        } else {
-            if (queryString.length() == 0) {
-                mTitleText.setText(R.string.no_search_term);
+            Bundle queryBundle = new Bundle();
+            queryBundle.putString("queryString", queryString);
+            getSupportLoaderManager().restartLoader(0, queryBundle, this);
             } else {
                 mTitleText.setText(R.string.no_network);
             }
         }
+
+
+    @NonNull
+    @Override
+    public Loader<Object> onCreateLoader(int id, @Nullable Bundle args) {
+        String queryString = "";
+        if (args != null) {
+            queryString = args.getString("queryString");
+        }
+        return new BookLoader(this, queryString);
     }
 
-    public class FetchBook extends AsyncTask<String, Void, String> {
-        private WeakReference<TextView> mTitleText;
-        private WeakReference<TextView> mAuthorText;
+    @Override
+    public void onLoadFinished(@NonNull androidx.loader.content.Loader<Object> loader, Object data) {
+        try {
+            JSONObject jsonObject = new JSONObject(String.valueOf(data));
+            JSONArray itemsArray = jsonObject.getJSONArray("items");
+            int i = 0;
+            String title = null;
+            String authors = null;
+            while (i < itemsArray.length() && (authors == null && title == null)){
+                JSONObject book = itemsArray.getJSONObject(i);
+                JSONObject volumeInfo = book.getJSONObject("volumeInfo");
 
-        public FetchBook(TextView titleText, TextView authorText) {
-            this.mTitleText = new WeakReference<>(titleText);
-            this.mAuthorText = new WeakReference<>(authorText);
-        }
-
-        @Override
-        protected String doInBackground(String... strings) {
-            return NetworkUtils.getBookInfo(strings[0]);
-        }
-
-        @Override
-        protected void onPostExecute(String s) {
-            super.onPostExecute(s);
-            try {
-                JSONObject jsonObject = new JSONObject(s);
-                JSONArray itemsArray = jsonObject.getJSONArray("items");
-                int i = 0;
-                String title = null;
-                String authors = null;
-                while (i < itemsArray.length() && (authors == null && title == null)){
-                    JSONObject book = itemsArray.getJSONObject(i);
-                    JSONObject volumeInfo = book.getJSONObject("volumeInfo");
-
-                    //Try to get the title and author
-                    try {
-                        title = volumeInfo.getString("title");
-                        authors = volumeInfo.getString("authors");
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                    i++;
+                //Try to get the title and author
+                try {
+                    title = volumeInfo.getString("title");
+                    authors = volumeInfo.getString("authors");
+                } catch (JSONException e) {
+                    e.printStackTrace();
                 }
-
-                // If title & author are found display results
-                if (title != null && authors != null) {
-                    mTitleText.get().setText(title);
-                    mAuthorText.get().setText(authors);
-                } else {
-                    // show failed results
-                    mTitleText.get().setText(R.string.no_result);
-                    mAuthorText.get().setText("");
-                }
-            } catch (Exception e) {
-                //If proper JSON string was not received show failed result;
-                mTitleText.get().setText(R.string.no_result);
-                mAuthorText.get().setText("");
+                i++;
             }
+
+            // If title & author are found display results
+            if (title != null && authors != null) {
+                mTitleText.setText(title);
+                mAuthorText.setText(authors);
+            } else {
+                // show failed results
+                mTitleText.setText(R.string.no_result);
+                mAuthorText.setText("");
+            }
+        } catch (Exception e) {
+            //If proper JSON string was not received show failed result;
+            mTitleText.setText(R.string.no_result);
+            mAuthorText.setText("");
         }
+    }
+
+    @Override
+    public void onLoaderReset(@NonNull androidx.loader.content.Loader<Object> loader) {
+
     }
 }
